@@ -1,0 +1,126 @@
+%% refer to the relative log-script 
+
+%% upload data 
+
+for ii=1:nblocks;   
+    eval(sprintf('load([params.pathPREPRO, params.dataprepro_%d])', ii));
+    eval(sprintf('data_preprocessed_b%d = data_preprocessed', ii));
+end 
+
+%% take off trigger channel 
+
+for ii=1:nblocks;
+    cfg=[];
+    cfg.channel = ['all', params.trigchan];
+    eval(sprintf('data_preprocessed_b%d = ft_preprocessing(cfg, data_preprocessed_b%d)', ii, ii));  
+end 
+
+%% baseline correction for each trial and block 
+
+begsample = samplesBaseline(1);    
+endsample = samplesBaseline(2);    
+
+% normalize each contact, trial and electrode for its baseline 
+for ii=1:nblocks; 
+    
+    for tt=1:length(data_preprocessed_b1.trial);        
+    % baseline is a matrix ncontacts x ntrials x nconditions. 
+    eval(sprintf('baseline(:,tt,ii) = mean(data_preprocessed_b%d.trial{tt}(:,begsample:endsample), 2);', ii));       % % estimate the baseline and subtract it
+    eval(sprintf('meanVals = repmat(baseline(:,tt,ii),[1, length(data_preprocessed_b%d.time{1})]);', ii));      %creates a matrix 1x139000 and repeats in this matrix the baseline 
+    eval(sprintf('data_preprocessed_b%d.trial{tt} = data_preprocessed_b%d.trial{tt}./ meanVals;',ii, ii));
+
+    end 
+end 
+
+
+%% select stimulus trial only 
+% triggers in the data are 1 fixation, 1 stimulus. 
+
+for ii=1:nblocks; 
+   
+    eval(sprintf('data_preprocessed_b%d.trial_stim  = data_preprocessed_b%d.trial(2:2:end);', ii, ii));
+    
+end 
+
+%% average across time
+bas_time = tbaseline * 1000;
+baseline_time = [ stim_time - bas_time(2) stim_time - bas_time(1)]; %same baseline for each window 
+
+for twind =1:ntimewindows;     % create empty matrix for each of the time windows 
+    eval(sprintf('task%d_time = [stim_time + temp_wind%d_msec(1) stim_time + temp_wind%d_msec(2)];', twind, twind, twind));
+    eval(sprintf('avg_time_t%d = zeros(8,length(data_preprocessed_b1.trial_stim),2,length(data_preprocessed_b1.label));', twind));
+end
+
+for twind = 1:ntimewindows;
+    for ii=1:nblocks;
+        for trialn = 1:length(data_preprocessed_b1.trial_stim);
+            eval(sprintf('trialdata = data_preprocessed_b%d.trial_stim{1,trialn};', ii));  % put in trialdata the timexcontact magnitude values for each trial 
+            for ncontact = 1: size(trialdata,1);
+                eval(sprintf('avg_time_t%d(ii,trialn,1,ncontact) = mean(trialdata(ncontact,baseline_time(1):baseline_time(2)));', twind ));
+                eval(sprintf('avg_time_t%d(ii,trialn,2,ncontact) = mean(trialdata(ncontact,task%d_time(1):task%d_time(2)));', twind, twind, twind));
+            end 
+        end 
+    end
+end 
+
+%% save for second level analyses
+% avg-time is a NxNxNxN matrix in which the first dimension is the
+% condition, the second is the trial, the third is baseline/task, and the
+% fourth is the contact
+
+for twind = 1:ntimewindows;
+    eval(sprintf('save([params.OutPath params.ssID ''_avg_time_t%d''],''avg_time_t%d'');', twind, twind));
+    eval(sprintf('save([params.OutPath params.ssID ''_avg_time_t%d'],'avg_time_t%d'');', twind, twind));
+end
+
+save([params.OutPath params.ssID '_block_order'],'block_order')  
+chan_index = data_preprocessed_b1.label;
+save([params.OutPath params.ssID '_chan_index'], 'chan_index');
+
+%% average across conditions and save means 
+
+for twind = 1:ntimewindows;
+    eval(sprintf('avg_tot_t%d = mean(avg_time_t%d);', twind, twind));
+    eval(sprintf('avg_tot_t%d = squeeze(avg_tot_t%d);', twind, twind));    
+    eval(sprintf('means_t%d = mean(avg_tot_t%d, 1);', twind, twind));
+    eval(sprintf('means_t%d = array2table(squeeze(means_t%d), ''RowNames'', {''baseline'', ''task''});', twind, twind));
+    eval(sprintf('writetable(means_t%d, [params.OutPath params.ssID ''_mean_values_basVStask_t%d''], ''FileType'', ''spreadsheet'');', twind, twind));
+end 
+
+
+%% t-test and correction FDR
+% the t-test compares baseline vs task
+
+for twind = 1:ntimewindows;
+
+    eval(sprintf('test_table_t%d = zeros(size(trialdata,1),10);', twind));   
+
+    for ncontact = 1:size(avg_tot_t1,3);
+    eval(sprintf('[h,p,ci,stats] = ttest(avg_tot_t%d(:,1,ncontact),avg_tot_t%d(:,2,ncontact));', twind, twind));
+            eval(sprintf('test_table_t%d(ncontact,6) = h;', twind));
+            eval(sprintf('test_table_t%d(ncontact,3) = p;', twind));
+            eval(sprintf('test_table_t%d(ncontact,4) = ci(1);', twind));
+            eval(sprintf('test_table_t%d(ncontact,5) = ci(2);', twind));
+            eval(sprintf('test_table_t%d(ncontact,1) = stats.tstat;', twind));
+            eval(sprintf('test_table_t%d(ncontact,2) = stats.df;', twind));
+    end 
+
+    eval(sprintf('[h, crit_p, adj_ci_cvrg, adj_p]=fdr_bh(test_table_t%d(:,3), 0.05);', twind));
+    eval(sprintf('test_table_t%d(:,7) = adj_p;', twind));
+    eval(sprintf('test_table_t%d(:,8) = adj_ci_cvrg;', twind));
+    eval(sprintf('test_table_t%d(:,9) = crit_p;', twind));
+    eval(sprintf('test_table_t%d(:,10) = h;', twind));
+
+    eval(sprintf('test_table_t%d = array2table(test_table_t%d,''VariableNames'',{''tvalue'',''df'',''pvalue'', ''lCI'', ''uCI'', ''hypothesis'',''FDRpvalue'', ''CIcoverage'', ''FDRpthreshold'', ''FDRhypothesis''});', twind, twind));
+    
+    % list of tesponsive contacts 
+    eval(sprintf('list_contacts_t%d = [data_preprocessed.label(2:end,:) test_table_t%d(:,:)];', twind, twind));
+
+    % save output
+    eval(sprintf('writetable(list_contacts_t%d, [params.OutPath params.ssID ''_test_contacts_t%d''], ''FileType'', ''spreadsheet'');', twind, twind));
+
+end 
+
+
+%% 
+
