@@ -1,0 +1,70 @@
+% This code has been created to select contacts for repeated-measure
+% analyses basing on their high-gamma response to the stimulus compared to
+% the baseline activity (data-drive approach). 
+% the analysis includes baseline correction (division) and paired-t-test
+% analysis between the post-stimulus period and the baseline 
+
+% The input dataset(s) must be a data structure as obtained by fieldtrip preprocessing
+% e.g. having:
+% hdr 1x1 structure
+% trial = 1 x ntrials per block cell
+% fsample
+% label = n contacts x 1 cell (labels of the contacts)
+% trialinfo = ntrials x n (n = number of features per each trial [e.g. RT, accuracy ...])
+% sampleinfo = ntrials x 2 (for each trial the first and last timestamp)
+
+
+%% log for contact selection 
+
+nblocks = 8; %number of blocks (conditions) of the experiment
+params = []; %create parameter structure
+params.ssID        = 'pt1';
+params.pathPREPRO    = '\'; %path of preprocessed data 
+
+for ii = 1: nblocks
+    eval(sprintf('params.dataprepro_b_%d    = ''%s_b%d_preproHILB_AVG.mat'';', params.ssID ii));
+end
+
+params.OutPath     = '\';   %path to save output
+params.trigchan    = {'-DC DC09'};   %trigger channel
+data_preprocessed =  ''  % name of your datafile 
+
+tbaseline = [-0.5 -0.05];    %baseline in seconds 
+stim_time = 2001;            %when the stimulus appears in milliseconds 
+ntimewindows = 2;            %number of time windows to be analysed
+
+%time windows in milliseconds (0 = stimulus)
+temp_wind1_msec = [0 150];   
+temp_wind2_msec = [150 350]; 
+
+%% log for plotting 
+% to plot the results of the contact selection on the patient pial by means
+% of this code, you need:
+% 1) results obtained from previous selection analysis (of course) reporting
+% the significance of each contact activation 
+% 2) pial of the subject (obtained through freesurfer)
+% 3)  electrode positions in acpc coordinates (I used 3Dslicer for this)
+% 4) parameters of brain shift compensation obtained from the
+% reconstruction (3D slicer as well)
+% 5) subject's mri in acpc
+
+params = [];
+params.pathrecon    = '\'; %path with pial and electrode locations
+for ii = 1: nblocks
+    eval(sprintf('params.dataprepro_b_%d    = ''%s_b%d_preproHILB_AVG.mat'';', params.ssID ii));
+
+end
+params.mripre_acpc = 'pt1_mripre_acpc';  %name of the mri file 
+params.contacts = 'isaia_contacts_recon_acpc';   %name of the file with contact locations (one column for each dimension XYZ)
+params.outpath = 'C:\Users\valeria.peviani\Dropbox\VALERIA SALVATAGGI\PhD 27 feb\Body Repr\bodymetrics\Body representation\seeg patients\DATA\1_isaia\anatomy\';
+params.ssID = 'pt1';
+params.pial = 'lh.pial';  %name of the pial file
+params.elec = 'pt1_shifted_electrodes_pos';   %name of the electrode position file 
+ntimewindows = 2;
+for ii=1:ntimewindows;
+eval(sprintf('params.rm_results_t%d = ''pt1_test_contacts_t%d''', ii, ii));
+eval(sprintf('params.sel_results_t%d = ''pt1_selection%d'' ', twind, twind));
+end 
+params.xpar = -2.79; %from 3D slicer for brain shift 
+params.ypar = 10.73;
+params.zpar = 35.66;
