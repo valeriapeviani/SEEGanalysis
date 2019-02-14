@@ -1,0 +1,190 @@
+%% see relative log-script
+
+%% upload anatomy files
+
+% pre mri 
+mripre_acpc = load([params.outpath params.mripre_acpc]);
+mripre_acpc = mripre_acpc.mripre_acpc;
+
+% subject's pial 
+pial = ft_read_headshape([params.pathrecon params.pial]);
+pial.coordsys = 'acpc';
+ft_plot_mesh(pial); 
+lighting gouraud; 
+camlight;
+
+% plot only the vertices (to allow the deeper contacts to be visible)
+pial = ft_read_headshape([params.pathrecon params.pial]);
+pial.coordsys = 'acpc';
+ft_plot_mesh(pial.pos); 
+lighting gouraud; 
+camlight;
+
+%% build the contacts structure to be plotted
+% ft_electrodeplacement function allows to manually mark the positions of
+% the contacts on the subject's brain. Whereas it is very useful for ecog
+% data, in case of intracranial data is difficult to be precise. 
+% I suggest to use other softwares (e.g. 3Dslicer) to perform the
+% electrode reconstruction and to save each contact position in XYZ (acpc
+% space) coordinates. Here, I make use of this function to create the file
+% structured for later actions. 
+
+hdr = ft_read_header([params.pathrecon, params.dataprepro_b1]);   %% read header information from the recording file 
+cfg         = [];
+cfg.channel = hdr.label;
+%select random points just to create the file:
+elec_f = ft_electrodeplacement(cfg, mripre_acpc);    
+%upload row patient's contacts positions and labels
+[contacts, labels] = xlsread([params.pathrecon params.contacts]);   
+
+% modify elec_f basing on the electrode positions that I already know
+ncontacts = length(contacts);
+elec_f.elecpos = contacts;
+elec_f.chanpos = contacts;
+elec_f.label = labels;
+elec_f.tra = zeros(ncontacts,ncontacts); 
+
+for ii=1:length(contacts);      %modify the tra matrix (it was in the electrode position structure) basing on electrodes' number
+    elec_f.tra(ii,ii) = 1;
+end 
+
+%% brain shift compensation 
+
+% parameters to be used in the brainshift 
+xpar = - params.xpar 
+ypar = - params.ypar 
+zpar = - params.zpar 
+
+% import pial and prepare hull  
+cfg           = []; 
+cfg.method    = 'headshape';
+cfg.headshape = pial; 
+hull = ft_prepare_mesh(cfg);
+  
+% transform
+elec_fr = elec_f;  
+cfg             = []; 
+cfg.keepchannel = 'yes';
+cfg.elec        = elec_fr;  
+cfg.method      =  'interactive' ; %'template'; %'headshape'; %'interactive';   % interactive method allows to apply the transformation manually
+cfg.headshape   = hull;
+cfg.feedback    = 'yes';
+elec_fr = ft_electroderealign(cfg);
+
+%plot surface and electrodes 
+pial = ft_read_headshape([params.pathrecon params.pial]);
+pial.coordsys = 'acpc';
+ft_plot_mesh(pial); 
+lighting phong; 
+camlight headlight;
+ft_plot_sens(elec_fr, 'label', 'on','fontcolor',1/255*[153 255 0], 'elecsize', 20, 'facecolor', 1/255*[153 255 0]);
+
+%% import contact selection analysis results 
+
+for ii=1:ntimewindows;
+    eval(sprintf('[ncontacts_t%d, txtcontacts_t%d, respcontacts_t%d] = xlsread([params.rm_path, params.sel_results_t%d]);', repmat(ii, 1,4)));   
+end 
+
+%% report info of the analysis on the list of contacts to be plotted 
+elecnames = elec_fr.label; 
+
+% change the names
+for ii=1:length(respcontacts_t1); 
+   
+    respcontacts_t1{ii} =  strrep(respcontacts_t1(ii), "''", "'");
+    respcontacts_t2{ii} =  strrep(respcontacts_t2(ii), "''", "'");
+    % add other basing on the number of time windows
+%     respcontacts_t3{ii} =  strrep(respcontacts_t3(ii), "''", "'");
+%     respcontacts_t4{ii} =  strrep(respcontacts_t4(ii), "''", "'");
+%     respcontacts_t5{ii} =  strrep(respcontacts_t5(ii), "''", "'");
+    end 
+end 
+
+% build a list of contacts (for which I have data) with the info about the
+% analysis, for each timewindow
+for twind=1:ntimewindows;
+ind = 1;
+    for ii = 1:length(elecnames);
+        s = respcontacts_t1{:,1};
+        chind = find(cellfun(@(s) any(s == elecnames{ii}), respcontacts_t1(:,1))); %cellfun applies the function to each cell 
+            if chind >0;                
+                eval(sprintf('elecnames2_t%d(ind,:) = [elecnames(ii) respcontacts_t%d(chind,2:end) ii];', twind, twind));   %in elecnames add in the last column the index of the contact in the original elecnames file
+                ind = ind +1;           
+            end 
+    end 
+end 
+%% create a elec structure for each channel to be plotted 
+
+chanind = cell2mat(elecnames2_t1(:,12));
+
+ind = 1;
+for ii =1: length(chanind);
+   eval(sprintf('elec_frr_e%d.chanpos(1,:) = elec_fr.chanpos(chanind(ii),:);', ind));
+   eval(sprintf('elec_frr_e%d.elecpos(1,:) = elec_fr.elecpos(chanind(ii),:);', ind));
+   eval(sprintf('elec_frr_e%d.label(1,1)=elec_fr.label(chanind(ii));', ind));
+   eval(sprintf('elec_frr_e%d.tra = 1;', ind));
+   eval(sprintf('elec_frr_e%d.unit = elec_fr.unit;', ind));
+   eval(sprintf('elec_frr_e%d.cfg = elec_fr.cfg;', ind));
+   ind = ind+1;
+end 
+
+
+%% plot define colors 
+nonsig = 1/255*[102 102 102];
+sign_pos = 1/255*[255 153 0];
+sign_pos_fdr = 1/255*[255 0 0];
+sign_neg = 1/255*[51 153 255];
+sign_neg_fdr = 1/255*[0 0 255];
+
+meshcol = 1/255*[204 204 204];
+
+%% plot only the significance, not its direction
+% for twind = 1:ntimewindows;
+%     figure(twind);
+%     eval(sprintf('figure_t%d = ft_plot_mesh(pial.pos, ''vertexcolor'', meshcol, ''vertexsize'',1);', twind)); 
+%     lighting gouraud; 
+%     camlight;
+%     hold on 
+%     for ii =1:length(chanind);
+%         if eval(sprintf('cell2mat(elecnames2_t%d(ii,7)) == 0;', twind));
+%         eval(sprintf('ft_plot_sens(elec_acpc_frr_e%d, ''label'', ''off'', ''fontcolor'', ''w'', ''elecsize'', 20, ''facecolor'', nonsig);', ii));
+%         elseif eval(sprintf('cell2mat(elecnames2_t%d(ii,7)) == 1 && cell2mat(elecnames2_t%d(ii,11)) == 0;', twind, twind));
+%         eval(sprintf('ft_plot_sens(elec_acpc_frr_e%d, ''label'', ''off'', ''fontcolor'', ''w'', ''elecsize'', 20, ''facecolor'', sign);', ii));
+%         elseif eval(sprintf('cell2mat(elecnames2_t%d(ii,11)) == 1;', twind));
+%         eval(sprintf('ft_plot_sens(elec_acpc_frr_e%d, ''label'', ''off'', ''fontcolor'', ''b'', ''elecsize'', 20, ''facecolor'', sign_fdr);', ii));
+%         end 
+%     end 
+%     
+%    eval(sprintf('savefig([params.rm_path params.ssID ''_figure_t%d'', ''figure_t%d''])', twind, twind));
+% 
+% end 
+
+%% plot the significance along with its direction 
+
+for twind = 1:ntimewindows;
+    figure(twind);
+    eval(sprintf('figure_t%d = ft_plot_mesh(pial.pos, ''vertexcolor'', meshcol, ''vertexsize'',1);', twind)); 
+    lighting gouraud; 
+    camlight;
+    hold on 
+    for ii =1:length(chanind);
+        if eval(sprintf('cell2mat(elecnames2_t%d(ii,7)) == 0;', twind));
+        eval(sprintf('ft_plot_sens(elec_frr_e%d, ''label'', ''off'', ''fontcolor'', ''w'', ''elecsize'', 20, ''facecolor'', nonsig);', ii));
+        elseif eval(sprintf('cell2mat(elecnames2_t%d(ii,7)) == 1 && cell2mat(elecnames2_t%d(ii,11)) == 0 && cell2mat(elecnames2_t%d(ii,2)) < 0 ;', twind, twind, twind));  %negative t-values mean lower baseline (positive change in task)
+        eval(sprintf('ft_plot_sens(elec_frr_e%d, ''label'', ''off'', ''fontcolor'', ''w'', ''elecsize'', 20, ''facecolor'', sign_pos);', ii));
+        elseif eval(sprintf('cell2mat(elecnames2_t%d(ii,11)) == 1 && cell2mat(elecnames2_t%d(ii,2)) < 0;', twind, twind));
+        eval(sprintf('ft_plot_sens(elec_frr_e%d, ''label'', ''off'', ''fontcolor'', ''b'', ''elecsize'', 20, ''facecolor'', sign_pos_fdr);', ii));
+        elseif eval(sprintf('cell2mat(elecnames2_t%d(ii,7)) == 1 && cell2mat(elecnames2_t%d(ii,11)) == 0 && cell2mat(elecnames2_t%d(ii,2)) > 0;', twind, twind, twind));
+        eval(sprintf('ft_plot_sens(elec_frr_e%d, ''label'', ''off'', ''fontcolor'', ''w'', ''elecsize'', 20, ''facecolor'', sign_neg);', ii));
+        elseif eval(sprintf('cell2mat(elecnames2_t%d(ii,11)) == 1 && cell2mat(elecnames2_t%d(ii,2)) > 0;', twind, twind));
+        eval(sprintf('ft_plot_sens(elec_frr_e%d, ''label'', ''off'', ''fontcolor'', ''b'', ''elecsize'', 20, ''facecolor'', sign_neg_fdr);', ii));
+        end 
+    end 
+    
+   eval(sprintf('savefig([params.rm_path params.ssID ''_figure_t%d'', ''figure_t%d''])', twind, twind));
+
+end 
+
+
+
+%%
