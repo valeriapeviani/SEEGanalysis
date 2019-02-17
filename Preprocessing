@@ -1,4 +1,5 @@
 %% preprocessing data 
+% run to the relative log-script to that directly calls the present script 
 % to run this script three custom-made fucntions are needed (and they are "hardcoded" basing on the structure of my behavioural data)
 % - check_triggers to process trigger channel and check whether the log-file and trigger timestamps correspond
 % - Populatetrialinfo and Trialfun_content for trial redefinition to allow signal segmentation 
