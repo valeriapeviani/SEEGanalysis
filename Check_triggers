@@ -1,0 +1,176 @@
+% input:
+% trigger data are derived from the datastructure of the trigger channel
+% (trigger.trial)
+% datPsy and txtPsy are the psychopy logfile 
+
+% output:
+% SEEtriggers are the timestamps (number of trials x 1) 
+% MEANdiff is the difference between EEG and psychopy, 
+% Triggers is the figure 
+
+
+function [SEEGtriggers, MEANdiffPSYEEG, Triggers] = Check_triggers(triggerdata, datPsy, txtPsy, paramsfileECOG);
+
+%% load and plot data 
+triggerdata = triggerdata- repmat(mean(triggerdata,2),1,length(triggerdata)); %creates a matrix 1xlength(triggerdata) which repeats the average of triggerdata (2 is the dimension, that is the horizontal dimension). triggerdata is now "normalized" as its own mean value is substracted from it 
+figure
+
+subplot(2,1,1)     
+plot((triggerdata))       
+subplot(2,1,2)
+plot(unique(triggerdata))
+
+[x,y] = ginput(1);      % select amplitude threshold to detect triggers
+cutoff =  y;     
+
+%% extract triggers' timestamps
+
+newtrigs1=zeros(1,length(triggerdata));   %initialize empty matrix 
+
+tt1 = find(triggerdata>cutoff);      %find the values above the cutoff
+newtrigs1(1,tt1)=1;      %not clear. somehow is putting values=1 in trigger timepoints. infact look at plot(newtrigs1)
+
+newtrigs2B=newtrigs1>0;     %select only trigger
+newtrigs3=diff(newtrigs2B);   %add to the data their difference. Look plot(newtrigs3)
+newtrigs4=find(newtrigs3>0);    %and now find the timepoints with newtrigs>0
+
+%% create vertical file to be saved as a file
+
+newtrigs5 = newtrigs4./1000;
+SEEGtriggers=newtrigs4';
+
+%% extract relevant events 
+% sorry this is hardcoded because it is based on my own logfile 
+txtPsy2=txtPsy(62:end,:);    %discard the first part of the logfile (instructions, sample trial...)
+txtPsy3 = txtPsy2(:,end);    %take only the second coloumn that contains relevant info 
+datPsy2=datPsy(62:end,:);
+
+stim = strmatch ('stimulus ON', txtPsy3);         %coloumn indexes for stimuli
+fixation = strmatch('fixation ON', txtPsy3);      %coloumn indexes for fixations
+
+stimTS = (datPsy2(stim,:));      %select timestamps of the stimuli by selecting rows matched with 'stimulus ON'
+stimTSinsec = datPsy2(stim,:)./1000;         %the same as before but leaving it in seconds 
+fixTS = (datPsy2(fixation,:));
+fixTSinsec = datPsy2(fixation,:)./1000;
+
+TS_PSY = zeros(800,1);     %merge fixation and stimulus timestamps in a unique matrix
+
+for ii=1:2:length(TS_PSY);
+    for iii= (ii+1)/2;
+        TS_PSY(ii:ii+1,:) = ([fixTS(iii,:);stimTS(iii,:)]);
+    end 
+end 
+
+%check if the number of triggers sent is equal to the number of the triggers detected from the eeg signal (multiplied by 8 because I am considering one block at a time)
+if (length(stimTS)+length(fixTS)) == length(newtrigs4)*8      
+    disp 'OK'
+else 
+    disp 'something is wrong'
+end
+
+%% plotting the EEG and the PSY triggers
+difftimeEEG = diff(newtrigs5);     %this returns all the differences, so both fixation time and reaction times
+
+close all
+Triggers = figure ('Name', 'Triggers')
+subplot (2,1,1)
+
+clc
+
+if (paramsfileECOG == 'block001.edf')
+    difftimePSY = diff(TS_PSY(1:100,:));
+    diffPSYEEG = ((difftimePSY')-difftimeEEG);
+    MEANdiffPSYEEG = mean(diffPSYEEG);
+    subplot(2,1,1)
+    histogram(diffPSYEEG)
+    xlabel('difference between fixation times')
+    ylim([0 50])
+    subplot(2,1,2)
+    plot([difftimePSY([1:99])]','r','Marker','+')
+elseif (paramsfileECOG == 'block002.edf')
+    difftimePSY = diff(TS_PSY(101:200,:));
+    diffPSYEEG = ((difftimePSY')-difftimeEEG);
+    MEANdiffPSYEEG = mean(diffPSYEEG);
+    subplot(2,1,1)
+    histogram(diffPSYEEG)
+    xlabel('difference between fixation times')
+    ylim([0 50])
+    subplot(2,1,2)
+    plot([difftimePSY([1:99])]','r','Marker','+')
+elseif (paramsfileECOG == 'block003.edf')
+    difftimePSY = diff(TS_PSY(201:300,:));
+    diffPSYEEG = ((difftimePSY')-difftimeEEG);
+    MEANdiffPSYEEG = mean(diffPSYEEG);
+    subplot(2,1,1)
+    histogram(diffPSYEEG)
+    xlabel('difference between fixation times')
+    ylim([0 50])
+    subplot(2,1,2)
+    plot([difftimePSY([1:99])]','r','Marker','+')
+elseif (paramsfileECOG == 'block004.edf')
+    difftimePSY = diff(TS_PSY(301:400,:));
+    diffPSYEEG = ((difftimePSY')-difftimeEEG);
+    MEANdiffPSYEEG = mean(diffPSYEEG);
+    subplot(2,1,1)
+    histogram(diffPSYEEG)
+    xlabel('difference between fixation times')
+    ylim([0 50])
+    subplot(2,1,2)
+    plot([difftimePSY([1:99])]','r','Marker','+')
+elseif (paramsfileECOG == 'block005.edf')
+    difftimePSY = diff(TS_PSY(401:500,:));
+    diffPSYEEG = ((difftimePSY')-difftimeEEG);
+    MEANdiffPSYEEG = mean(diffPSYEEG);
+    subplot(2,1,1)
+    histogram(diffPSYEEG)
+    xlabel('difference between fixation times')
+    ylim([0 50])
+    subplot(2,1,2)
+    plot([difftimePSY([1:99])]','r','Marker','+')
+elseif (paramsfileECOG == 'block006.edf')
+    difftimePSY = diff(TS_PSY(501:600,:));
+    diffPSYEEG = ((difftimePSY')-difftimeEEG);
+    MEANdiffPSYEEG = mean(diffPSYEEG);
+    subplot(2,1,1)
+    histogram(diffPSYEEG)
+    xlabel('difference between fixation times')
+    ylim([0 50])
+    subplot(2,1,2)
+    plot([difftimePSY([1:99])]','r','Marker','+')
+elseif (paramsfileECOG == 'block007.edf')
+    difftimePSY = diff(TS_PSY(601:700,:));
+    diffPSYEEG = ((difftimePSY')-difftimeEEG);
+    MEANdiffPSYEEG = mean(diffPSYEEG);
+    subplot(2,1,1)
+    histogram(diffPSYEEG)
+    xlabel('difference between fixation times')
+    ylim([0 50])
+    subplot(2,1,2)
+    plot([difftimePSY([1:99])]','r','Marker','+')
+else %(paramsfileECOG == 'block008.edf')
+    difftimePSY = diff(TS_PSY(701:800,:));
+    diffPSYEEG = ((difftimePSY')-difftimeEEG);
+    MEANdiffPSYEEG = mean(diffPSYEEG);
+    subplot(2,1,1)
+    histogram(diffPSYEEG)
+    xlabel('difference between fixation times')
+    ylim([0 50])
+    subplot(2,1,2)
+    plot([difftimePSY([1:99])]','r','Marker','+')
+end 
+end 
+
+    hold on
+    subplot (2,1,2)
+    plot([difftimeEEG([1:end])],'g','Marker','*')
+    legend({'trigPSY', 'trigEEG'})
+    legend boxoff
+   
+if MEANdiffPSYEEG < 0.0002 
+    disp 'OK'
+else
+    disp 'check the gitters' 
+end
+
+  
+end 
