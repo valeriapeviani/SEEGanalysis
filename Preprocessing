@@ -1,0 +1,202 @@
+%% preprocessing data 
+% to run this script three custom-made fucntions are needed (and they are "hardcoded" basing on the structure of my behavioural data)
+% - check_triggers to process trigger channel and check whether the log-file and trigger timestamps correspond
+% - Populatetrialinfo and Trialfun_content for trial redefinition to allow signal segmentation 
+
+%steps:
+%1) loading data with parameters specified in script "LOG_BP", changing
+%names, loading trigger channel
+%2) checking triggers 
+%3) rereference: average
+%4) preparing the data for: erps (filter freq >30hz for ERPs), tfa (broadband signal) and high gamma (hilbert transform and normalization)  
+%5) segmenting the data and defining trial 
+%6) possible downsampling 
+%7) saving preprocessed data
+
+%% loading only "physiological" channels
+
+cfg = [];     %initialize configuration file
+cfg.dataset     = [params.pathECOG, params.fileECOG];
+cfg.channel     =['all', params.nonphyschan, params.unknownchan] % non-physiological and unknown channels are removed
+cfg.continuous  = 'yes';
+[~,~,ext] = fileparts(params.fileECOG);
+
+disp('loading EDF file')
+      
+data_ecog  = ft_preprocessing(cfg);   %raw data in edf are preprocessed and named data_ecog
+
+        
+%% recoding the channel names
+
+switch params.cleanchannnames
+    case 'yes'
+        data_ecog.label = strrep(data_ecog.label, 'EEG ', '');
+        data_ecog.hdr.label = strrep(data_ecog.hdr.label,'EEG ', '');
+        data_ecog.label = strrep(data_ecog.label, 'MISC ', '');
+        data_ecog.hdr.label = strrep(data_ecog.hdr.label, 'MISC ', '');
+     case 'no'
+end
+                   
+%% loading event channel 
+
+disp('loading the event channel') 
+cfg = [];
+cfg.dataset     = [params.pathECOG, params.fileECOG];
+cfg.channel     = params.trigchan;        %in this case, cfg is only the trigger channel 
+cfg.continuous  = 'yes';
+if strmatch(ext,'.mat', 'exact')
+    clc
+    disp('loading MAT file')
+    load([params.pathECOG, params.fileECOG]);
+    trig  = ft_preprocessing(cfg,data);
+elseif strmatch(ext,'.edf', 'exact')
+    clc
+    disp('loading EDF file')
+    trig  = ft_preprocessing(cfg);       %raw data of the trigger channel are preprocessed and named trig
+end  
+        
+
+%% checking  triggers 
+
+triggerdata = trig.trial{1};      
+[datPsy,txtPsy] = xlsread([params.pathbehav, params.logfilename]);   %load psychopy data to call the function checking triggers 
+[SEEGtriggers, Triggers] = Check_triggers(triggerdata, datPsy, txtPsy, params.fileECOG);
+
+%% baseline correction
+
+cfg = [];
+cfg.channel = ['all']; 
+cfg.demean  = 'yes';    %apply baseline correction 
+data_ecog = ft_preprocessing(cfg, data_ecog);
+
+
+%% average ref
+
+cfg = [];
+cfg.channel = ['all']  
+cfg.reref               = 'yes'; 
+cfg.refchannel          = ['all']; 
+data_ecogAVG = ft_preprocessing(cfg,data_ecog);         
+
+%% take WM channels off 
+cfg = [];
+cfg.channel     =['all', params.WMchan];   % whitematter channels are removed
+data_ecogAVG  = ft_preprocessing(cfg, data_ecogAVG);   
+
+%% prepare data for erps
+
+cfg = [];
+cfg.lpfilter            = 'yes';
+cfg.lpfreq              = 30;
+cfg.lpfilttype          = 'firls';
+data_prepro_erpAVG = ft_preprocessing(cfg,data_ecogAVG); 
+
+%% pepare data for tfa (no changes, take the broadband signal)       
+                
+data_prepro_tfaAVG = data_ecogAVG;
+        
+%% doing hilbert on a 10Hz band basis and normalizing over the whole period
+    
+cnt = 1;
+
+for bp = params.freq      %it does this loop for every frequency 
+    cfg = [];
+    cfg.bdwith = params.bdwith;
+    cfg.baselinetype = params.baselinetype;
+    cfg.channel    = 'all';
+    cfg.bpfilter   = 'yes';
+    cfg.bpfreq     = [bp bp+cfg.bdwith];    %take only the high frequencies
+    cfg.bpfilttype = 'firls';
+    cfg.hilbert    = 'abs';     
+    data_hilbAVG = ft_preprocessing(cfg,data_ecogAVG);     
+
+%% Single trial normalization for each frequency band 
+
+baselineAVG = mean(data_hilbAVG.trial{1},2);                                        %create the baseline 
+meanValsAVG = repmat(baselineAVG,[1, length(data_hilbAVG.time{1})]);      %creates a matrix 1x139000 and repeats in this matrix the baseline 
+
+if (strcmp(cfg.baselinetype, 'relative'))
+    data_hilbAVG.trial{1} = data_hilbAVG.trial{1}./ meanValsAVG;     
+elseif (strcmp(cfg.baselinetype, 'relchange'))
+    data_hilbAVG.trial{1} = (data_hilbAVG.trial{1}-meanValsAVG) ./ meanValsAVG;
+     
+else
+    error('unsupported method for baseline normalization: %s', baselinetype);
+end
+
+%% averaging among frequencies 
+
+if cnt == 1    
+   %% initializing the matrix
+    data_appendAVG = data_hilbAVG;
+    cnt = cnt +1;
+    
+elseif cnt == length(params.freq)   
+    %% averaging over frequencies and assigning it back to data_hilb
+    data_appendAVG.trial{1} = cat(3,data_appendAVG.trial{1},data_hilbAVG.trial{1});
+    data_hilbAVG.trial{1} = [];
+    data_hilbAVG.trial{1}=mean(data_appendAVG.trial{1},3);
+    
+    cnt = cnt +1;
+    
+else   
+    %% accumulating the results over frequencies so that I can average over them later on
+    data_appendAVG.trial{1} = cat(3,data_appendAVG.trial{1},data_hilbAVG.trial{1});    %cat concatenates the inputs
+    cnt = cnt +1;
+end
+end
+        
+%% adding back the trigger channel append data
+    
+cfg = [];
+data_prepro_hilbAVG = ft_appenddata(cfg, trig, data_hilbAVG);
+
+cfg = [];
+data_prepro_tfaAVG = ft_appenddata(cfg, trig, data_prepro_tfaAVG);
+
+cfg = [];
+data_prepro_erpAVG = ft_appenddata(cfg, trig, data_prepro_erpAVG);
+    
+%% calling function to define trial info 
+
+TrialInfo = importdata([params.pathECOG, params.filePSY]); 
+Measures = importdata([params.pathECOG, params.measures]);    %import behavioural measures
+
+[Trl, TrlCell] = Populatetrialinfo(TrialInfo, Measures);           %define trial info (condition, RT, accuracy...)
+[trl] = Trialfun_content(cfg,params.fileECOG,trig, SEEGtriggers, Trl, params);                           %define trl (start, duration, end + additional infos) 
+ 
+
+%% segmenting data
+cfg = [];
+cfg.trl = trl;
+data_prepro_hilbAVG = ft_redefinetrial(cfg, data_prepro_hilbAVG);
+data_prepro_tfaAVG = ft_redefinetrial(cfg, data_prepro_tfaAVG);    
+data_prepro_erpAVG = ft_redefinetrial(cfg, data_prepro_erpAVG);
+
+%% downsampling the data      
+switch params.downsampling
+    case 'yes'
+        try
+            cfg = [];
+            cfg.resamplefs = 500;
+            cfg.detrend    = 'no';
+            cfg.demean     = 'no';
+            cfg.channel    = {'all'};
+            cfg.trials     = 'all';
+            
+            data_prepro_hilbAVG = ft_resampledata(cfg, data_prepro_hilbAVG);
+            data_prepro_tfaAVG = ft_resampledata(cfg, data_prepro_tfaAVG);
+            data_prepro_erpAVG = ft_resampledata(cfg, data_prepro_erpAVG);            
+        end
+end
+
+%% saving the preproc data (hilbert, ERP and TFA)
+
+disp(['saving data :', params.ssID])
+
+save([params.OutPath params.ssID '_preproHILB_AVG'],'data_prepro_hilbAVG')    
+save([params.OutPath params.ssID '_preproTFA_AVG'],'data_prepro_tfaAVG')
+save([params.OutPath params.ssID '_preproERP_AVG'],'data_prepro_erpAVG')
+savefig([params.OutPath params.ssID '_FIG', 'Triggers'])
+
+xlswrite([params.OutPath params.ssID '_triggers'], SEEGtriggers) 
