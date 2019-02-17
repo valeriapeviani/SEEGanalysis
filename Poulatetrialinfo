@@ -1,0 +1,163 @@
+%% function to populate trial information from the logfile
+% steps: 
+% 1) load the output from psychopy, load the patient's behav measures (targets dimensions)
+% 2) compute the accuracy (in my experiment the participant could have underestimated, overestimated or accurately estimated the target's dimensions);
+% 3) create a Trl file with all the info coded in numbers 
+% 4) add the type of triggers (fixation, stimulus). 
+% 5) the outputs are: Trl in numbers TrlCell as a cell info about each trial in a N trial x X matrix  
+
+function [Trl, TrlCell] = Populatetrialinfo(TrialInfo, Measures);
+
+%% load the trial file (output from psychopy)
+
+header = TrialInfo(1,:);
+ColsId = header(1,:);
+TrialInfo= TrialInfo(2:end,:);     %take off the first line (header)
+
+for ii = 1:length(TrialInfo);
+    trialn = char(TrialInfo(ii,:));
+    TrialInfo2(ii,:) = strsplit(trialn);            %split the file by spaces 
+
+end 
+
+%% import targets' measures 
+
+% Measures = importdata([params.pathECOG, params.measures]);    %import hand measures 
+SHL = Measures.data(4,1);
+SHW = Measures.data(5,1);
+SML = Measures.data(6,1);
+SMW = Measures.data(7,1);
+OHL = Measures.data(8,1);
+OHW = Measures.data(9,1);
+OML = Measures.data(10,1);
+OMW = Measures.data(11,1);
+
+
+nSHL = find(contains(TrialInfo2(:,2),'SHL'));    %find the indexes of the lines containing the various conditions
+nSHW = find(contains(TrialInfo2(:,2),'SHW'));
+nSML = find(contains(TrialInfo2(:,2),'SML'));
+nSMW = find(contains(TrialInfo2(:,2),'SMW'));
+nOHL = find(contains(TrialInfo2(:,2),'OHL'));   
+nOHW = find(contains(TrialInfo2(:,2),'OHW'));   
+nOML = find(contains(TrialInfo2(:,2),'OML'));   
+nOMW = find(contains(TrialInfo2(:,2),'OMW'));   
+
+conditionTRL = zeros(400,1);
+conditionTRL(nSHL(1,1):nSHL(50,1),1) = SHL;    %put the correct target measure paired with each trial's condition
+conditionTRL(nSHW(1,1):nSHW(50,1),1) = SHW;
+conditionTRL(nSML(1,1):nSML(50,1),1) = SML;
+conditionTRL(nSMW(1,1):nSMW(50,1),1) = SMW;
+conditionTRL(nOHL(1,1):nOHL(50,1),1) = OHL;
+conditionTRL(nOHW(1,1):nOHW(50,1),1) = OHW;
+conditionTRL(nOML(1,1):nOML(50,1),1) = OML;
+conditionTRL(nOMW(1,1):nOMW(50,1),1) = OMW;
+
+
+%% add accuracy 
+
+for ii = 1:length(TrialInfo2);
+    if str2double(TrialInfo2(ii,4)) > conditionTRL(ii,1) & strmatch(TrialInfo2(ii,8), 'down')
+        TrialInfo2(ii,9) = cellstr('accurate');
+    elseif str2double(TrialInfo2(ii,4)) > conditionTRL(ii,1) & strmatch(TrialInfo2(ii,8), 'left')
+        TrialInfo2(ii,9) = cellstr('overestimated');
+    elseif str2double(TrialInfo2(ii,4)) < conditionTRL(ii,1) & strmatch(TrialInfo2(ii,8), 'down')
+        TrialInfo2(ii,9) = cellstr('accurate');
+    elseif str2double(TrialInfo2(ii,4)) < conditionTRL(ii,1) & strmatch(TrialInfo2(ii,8), 'left')
+        TrialInfo2(ii,9) = cellstr('underestimated');    
+    end
+end
+
+
+
+
+%% code everything by numbers and create Trl
+TrialInfo3 = zeros(400,8);
+
+% trial number 1 to 400
+for ii = 1:length(TrialInfo3);
+    TrialInfo3(ii,1) = ii;
+end 
+
+% conditions coded 1 to 8 
+for ii = 1:length(TrialInfo3);                                 
+    if strmatch(TrialInfo2(ii,2), 'SHL')
+        TrialInfo3(ii,2) = str2double(replace(TrialInfo2(ii,2), 'SHL','1'));
+    elseif strmatch(TrialInfo2(ii,2), 'SHW')
+        TrialInfo3(ii,2) = str2double(replace(TrialInfo2(ii,2), 'SHW','2'));
+    elseif strmatch(TrialInfo2(ii,2), 'SML')
+        TrialInfo3(ii,2) = str2double(replace(TrialInfo2(ii,2), 'SML','3'));
+     elseif strmatch(TrialInfo2(ii,2), 'SMW')
+        TrialInfo3(ii,2) = str2double(replace(TrialInfo2(ii,2), 'SMW','4'));
+    elseif strmatch(TrialInfo2(ii,2), 'OHL')
+        TrialInfo3(ii,2) = str2double(replace(TrialInfo2(ii,2), 'OHL','5'));
+    elseif strmatch(TrialInfo2(ii,2), 'OHW')
+        TrialInfo3(ii,2) = str2double(replace(TrialInfo2(ii,2), 'OHW','6'));
+    elseif strmatch(TrialInfo2(ii,2), 'OML')
+        TrialInfo3(ii,2) = str2double(replace(TrialInfo2(ii,2), 'OML','7'));
+     elseif strmatch(TrialInfo2(ii,2), 'OMW')
+        TrialInfo3(ii,2) = str2double(replace(TrialInfo2(ii,2), 'OMW','8'));
+    end 
+end 
+
+% length of the line displayed, real length of the target, percentage of
+% line distortion and RT
+for ii = 1:length(TrialInfo3); 
+    TrialInfo3(ii,3) = str2double(TrialInfo2(ii,4));
+    TrialInfo3(ii,4) = conditionTRL(ii,1);
+    TrialInfo3(ii,5) = (((TrialInfo3(ii,3) - TrialInfo3(ii,4))*100)/(TrialInfo3(ii,4)));
+    TrialInfo3(ii,6) = str2double(TrialInfo2(ii,7));
+end 
+
+% responses coded 0-1 
+for ii = 1:length(TrialInfo3);                                 
+    if strmatch(TrialInfo2(ii,8), 'left')
+        TrialInfo3(ii,7) = str2double(replace(TrialInfo2(ii,8), 'left','0'));
+    elseif strmatch(TrialInfo2(ii,8), 'down')
+        TrialInfo3(ii,7) = str2double(replace(TrialInfo2(ii,8), 'down','1'));
+    end 
+end 
+
+
+% accuracy coded 1 to 3
+for ii = 1:length(TrialInfo3);                                 
+    if strmatch(TrialInfo2(ii,9), 'accurate')
+        TrialInfo3(ii,8) = str2double(replace(TrialInfo2(ii,9), 'accurate','0'));
+    elseif strmatch(TrialInfo2(ii,9), 'underestimated')
+        TrialInfo3(ii,8) = str2double(replace(TrialInfo2(ii,9), 'underestimated','1'));
+    elseif strmatch(TrialInfo2(ii,9), 'overestimated')
+        TrialInfo3(ii,8) = str2double(replace(TrialInfo2(ii,9), 'overestimated','2'));
+     
+    end 
+end 
+
+%%
+
+%duplicate trial info file, to account for both fixations and triggers 
+TrialInfo4 = zeros(800,8);
+for ii = 1:2:800; 
+    for iii = (ii+1)/2;      
+        TrialInfo4(ii:ii+1,:) = ([TrialInfo3(iii,:); TrialInfo3(iii,:)]);
+%           TrialInfo4(ii:ii+1,:) = ([TrialInfo3(iii,:)])
+    end 
+end 
+
+
+%%
+
+%add type of trigger
+typetrig = zeros(800,1);
+
+typetrig(1:2:800,1) = 0;     %fixation
+typetrig(2:2:800,1) = 1;     % stimulus
+TrialInfo4(1:800,9) = typetrig;
+
+
+
+
+Trl= TrialInfo4;
+
+headers = {'trialN', 'condition', 'linelength', 'targetlength', 'percentage', 'RT', 'resp', 'accuracy', 'typetrig'};
+TrlCell = [headers; num2cell(TrialInfo4)];
+
+
+end 
