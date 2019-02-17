@@ -1,0 +1,81 @@
+%% function to define trl for each eeg block 
+% the output trl is necessary for the data to be segmented in trial by
+% fieldtrip function ft_redefinetrial. trl is a ntrials x N matrix with all
+% the info about each trial (start and end of the trial in timestamps,
+% duration of the trial in msec, condition, accuracy, RT...) 
+
+function [trl] = Trialfun_content(cfg, paramsfileECOG, trig, SEEGtriggers, Trl, params);
+%% define trial limits
+
+cfg.pre               = params.epoch(1);
+cfg.post              = params.epoch(2);
+
+pre = cfg.pre;
+post = cfg.post;
+
+%% determine the number of samples before and after the trigger
+pretrig =  round(pre * trig.hdr.Fs);
+posttrig =  round(post * trig.hdr.Fs);
+
+%% create trl (default info trlbegin, trlend, offset + other info) depending on the block 
+
+
+if (paramsfileECOG == 'block001.edf')
+    for tt=1:size(SEEGtriggers)
+        trlbegin = SEEGtriggers(tt,1) + pretrig;
+        trlend = SEEGtriggers(tt,1) + posttrig;
+        offset = pretrig;
+        trl(tt,:) = [trlbegin trlend offset Trl(tt,1:9)];        
+    end 
+elseif (paramsfileECOG == 'block002.edf')
+    for tt=1:size(SEEGtriggers)
+        trlbegin = SEEGtriggers(tt,1) + pretrig;
+        trlend = SEEGtriggers(tt,1) + posttrig;
+        offset = pretrig;
+        trl(tt,:) = round([trlbegin trlend offset Trl(tt+100,1:9)]);    
+    end
+elseif (paramsfileECOG == 'block003.edf')
+    for tt=1:size(SEEGtriggers)
+        trlbegin = SEEGtriggers(tt,1) + pretrig;
+        trlend = SEEGtriggers(tt,1) + posttrig;
+        offset = pretrig;
+        trl(tt,:) = round([trlbegin trlend offset Trl(tt+200,1:9)]);    
+    end
+elseif (paramsfileECOG == 'block004.edf')
+    for tt=1:size(SEEGtriggers)
+        trlbegin = SEEGtriggers(tt,1) + pretrig;
+        trlend = SEEGtriggers(tt,1) + posttrig;
+        offset = pretrig;
+        trl(tt,:) = round([trlbegin trlend offset Trl(tt+300,1:9)]);   
+    end
+elseif (paramsfileECOG == 'block005.edf')
+    for tt=1:size(SEEGtriggers)
+        trlbegin = SEEGtriggers(tt,1) + pretrig;
+        trlend = SEEGtriggers(tt,1) + posttrig;
+        offset = pretrig;
+        trl(tt,:) = round([trlbegin trlend offset Trl(tt+400,1:9)]);    
+    end
+elseif (paramsfileECOG == 'block006.edf')
+    for tt=1:size(SEEGtriggers)
+        trlbegin = SEEGtriggers(tt,1) + pretrig;
+        trlend = SEEGtriggers(tt,1) + posttrig;
+        offset = pretrig;
+        trl(tt,:) = round([trlbegin trlend offset Trl(tt+500,1:9)]);    
+    end
+elseif (paramsfileECOG == 'block007.edf')
+    for tt=1:size(SEEGtriggers)
+        trlbegin = SEEGtriggers(tt,1) + pretrig;
+        trlend = SEEGtriggers(tt,1) + posttrig;
+        offset = pretrig;
+        trl(tt,:) = round([trlbegin trlend offset Trl(tt+600,1:9)]);    
+    end
+else   %if (params.fileECOG == 'block004.edf')
+    for tt=1:size(SEEGtriggers)
+        trlbegin = SEEGtriggers(tt,1) + pretrig;
+        trlend = SEEGtriggers(tt,1) + posttrig;
+        offset = pretrig;
+        trl(tt,:) = round([trlbegin trlend offset Trl(tt+700,1:9)]);    
+    end
+end
+    
+end 
