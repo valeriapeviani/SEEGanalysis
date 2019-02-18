@@ -1,0 +1,76 @@
+% plot high gamma magnitude (obtained through hilbert transform) averaged across trials 
+% run log-script before 
+
+ 
+%% load files for each block and read conditions
+
+for ii = 1:params.nblocks;
+eval(sprintf('load([params.pathPREPRO, params.fileHILB_AVG_b_%d]);', ii))
+eval(sprintf('data_prepro_hilbAVG_b%d = data_prepro_hilbAVG;', ii))'
+eval(sprintf('whichcond = data_prepro_hilbAVG_b%d.trialinfo(1,2); ',  ii));   %create a label for each block that specifies the condition 
+eval(sprintf('condb%d = ''Condition_%d'';', ii, whichcond));
+ 
+
+%% take off the trigger channel 
+
+cfg = [];
+cfg.channel = ['all', params.trigchan];
+eval(sprintf('data_prepro_hilbAVG_b%d = ft_preprocessing(cfg, data_prepro_hilbAVG_b%d);', ii, ii));
+end
+
+%% baseline correction for each trial and block 
+
+samplesBaseline = interp1(data_prepro_hilbAVG_b1.time{1}, [1:1:triallen], tbaseline); 
+
+begsample = samplesBaseline(1);    
+endsample = samplesBaseline(2);    
+
+for ii = 1:nblocks;
+    eval(sprintf)('ntrials = length(data_prepro_hilbAVG_b%d.trial)', ii));
+for tt=1:ntrials;    
+% % estimate the baseline and subtract it
+eval(sprintf('baseline = mean(data_prepro_hilbAVG_b%d.trial{tt}(:,begsample:endsample), 2);',ii )); % for each channel it averages the baseline among all the trials 
+eval(sprintf('meanVals = repmat(baseline,[1, length(data_prepro_hilbAVG_b%d.time{1})]);  ', ii));    %creates a matrix 1x139000 and repeats in this matrix the baseline 
+eval(sprintf('data_prepro_hilbAVG_b%d.trial{tt} = data_prepro_hilbAVG_b%d.trial{tt}./ meanVals;', ii, ii));
+    clear baseline meanVals
+end 
+end 
+
+%% averaging across trials and smoothing the signal 
+
+for ii = 1:nblocks 
+cfg = [];
+cfg.trials = [2:2:100]    %select only stimulus trials!
+eval(sprintf('cfg.trials = find(data_prepro_hilbAVG_b%d.trialinfo(:,9)==1)   ', ii));      %find stimulus trials 
+eval(sprintf('HILBAVG_TL_b%d = ft_timelockanalysis(cfg, data_prepro_hilbAVG_b%d);', ii, ii));
+eval(sprintf('HILBAVG_TL_b%d.avg(ichan,:) = smooth(HILBAVG_TL_b%d.avg(ichan,:),''moving'',sparam);', ii, ii));
+
+end 
+
+%% plot (plot 8 condition together for each channel)
+xlim = [-2 2];
+colors = 1/255.*[0 204 0; 0 102 0; 0 102 204; 0 255 255; 204 0 51; 204 153 51; 255 0 204; 255 153 204]; 
+
+for ii=135:length(HILBAVG_TL_b1.label);
+    chname = cell2mat(HILBAVG_TL_b1.label(ii));
+    %figure('visible','off');   %decomment to not plot the figure (just save it)
+    %figure;     %decomment to plot the figure 
+    
+    cfg = [];
+    cfg.xlim = xlim;
+    cfg.channel = chname;
+    cfg.title          = chname
+    cfg.graphcolor    = colors;
+                       
+    ft_singleplotER(cfg, HILBAVG_TL_b1,  HILBAVG_TL_b2, HILBAVG_TL_b3, HILBAVG_TL_b4, HILBAVG_TL_b5, HILBAVG_TL_b6, HILBAVG_TL_b7, HILBAVG_TL_b8);
+    legend(condb1, condb2, condb3, condb4, condb5, condb6, condb7, condb8, 'Location', 'bestoutside');
+
+    saveas(gcf, [params.OutPath_hilb_avg sprintf('Fig_%s.png', chname)]);
+end 
+
+
+
+%% save data 
+for ii = 1:nblocks 
+eval(sprintf('save([params.OutPath_hilb_avg params.ssID ''_sHILBAVG_TL_b%d''],''HILBAVG_TL_b%d'');', ii, ii));
+end 
